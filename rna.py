@@ -1,7 +1,38 @@
 import marimo
 
-__generated_with = "0.3.12"
+__generated_with = "0.4.0"
 app = marimo.App()
+
+
+@app.cell
+def __(
+    currcat,
+    genes_in_category,
+    level,
+    mo,
+    neur_fig,
+    neuron,
+    path_fig,
+    pathway,
+):
+    tab1 = mo.vstack(
+        [
+            mo.hstack([level, neuron, pathway], justify="start"),
+            mo.ui.plotly(neur_fig),
+            mo.ui.table(genes_in_category[pathway.value]) if pathway.value else "",
+        ]
+    )
+
+    tab2 = mo.vstack([level,currcat, mo.ui.plotly(path_fig)])
+
+    tabs = mo.ui.tabs(
+        {
+            "Neuron Analysis": tab1,
+            "Pathway across neurons": tab2,
+        }
+    )
+    tabs
+    return tab1, tab2, tabs
 
 
 @app.cell
@@ -161,37 +192,6 @@ def __(avg, category_genes, currcat, level, mo, px):
     path_fig.update_layout(yaxis={"dtick": 1})
     mo.output.clear()
     return path_fig,
-
-
-@app.cell
-def __(
-    currcat,
-    genes_in_category,
-    level,
-    mo,
-    neur_fig,
-    neuron,
-    path_fig,
-    pathway,
-):
-    tab1 = mo.vstack(
-        [
-            mo.hstack([level, neuron, pathway], justify="start"),
-            mo.ui.plotly(neur_fig),
-            mo.ui.table(genes_in_category[pathway.value]) if pathway.value else "",
-        ]
-    )
-
-    tab2 = mo.vstack([level,currcat, mo.ui.plotly(path_fig)])
-
-    tabs = mo.ui.tabs(
-        {
-            "Neuron Analysis": tab1,
-            "Pathway across neurons": tab2,
-        }
-    )
-    tabs
-    return tab1, tab2, tabs
 
 
 if __name__ == "__main__":
