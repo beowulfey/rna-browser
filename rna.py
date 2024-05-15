@@ -51,16 +51,15 @@ def __(mo, pathway, pathway_genes_converted):
 
 @app.cell
 def __():
-    ## scRNA ANALYSIS
+    ## scRNA ANALYSIS 1
     #  This uses Meld to analyze the different pathways.
 
-    import numpy as np
-    import meld
+    # Lets try going straight from the raw data
+    sample_info = [('GSM4040097', 'Pan-neural', '1'), ('GSM4040098', 'Pan-neural', '2'), ('GSM4040099', 'GABAergic neurons', '1'),
+               ('GSM404100', 'nmr-1 expressing neurons', '1'), ('GSM404101', 'Glutamatergic neurons', '1'), ('GSM404102', 'GABAergic neurons', '2')]
 
 
-    # zeros = pd.DataFrame(0, index=genes.index, columns = category_genes[level.value].columns)
-    # zeros.where()
-    return meld, np
+    return sample_info,
 
 
 @app.cell
@@ -101,11 +100,22 @@ def __(category_genes, genes, level, mo, pathway):
     return pathway_genes_converted,
 
 
-@app.cell
-def __(pd, url_1, url_2, url_3, url_4, url_cats, url_sc):
-    ## DATA IMPORT
+@app.cell(disabled=True)
+def __(pd):
+    ## DATA IMPORT V1
     #  Imports the categories (lists of genes in each category) at four levels of detail. Imports the CenGen Reads and pulls the gene names
     #  out into a separate dateframe.
+
+
+    ## CENGEN DATASET
+    url_sc = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/Liska_Single_Cell_TPM_threshold2.csv"
+
+    ## WALHOUT LAB ANNOTATIONS
+    url_cats = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/four_level_categories.csv"
+    url_1 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_one_genes.csv"
+    url_2 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_two_genes.csv"
+    url_3 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_three_genes.csv"
+    url_4 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_four_genes.csv"
 
     cats = pd.read_csv(url_cats)
     L1_genes = pd.read_csv(url_1)
@@ -136,6 +146,12 @@ def __(pd, url_1, url_2, url_3, url_4, url_cats, url_sc):
         cats,
         genes,
         reads,
+        url_1,
+        url_2,
+        url_3,
+        url_4,
+        url_cats,
+        url_sc,
     )
 
 
@@ -143,20 +159,16 @@ def __(pd, url_1, url_2, url_3, url_4, url_cats, url_sc):
 def __():
     import marimo as mo
     import pandas as pd
-    import re
+    import numpy as np
+    import scprep
+    import meld
     import plotly.express as px
 
+    # making sure plots & clusters are reproducible
+    np.random.seed(42)
 
-    ## CENGEN DATASET
-    url_sc = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/Liska_Single_Cell_TPM_threshold2.csv"
 
-    ## WALHOUT LAB ANNOTATIONS
-    url_cats = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/four_level_categories.csv"
-    url_1 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_one_genes.csv"
-    url_2 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_two_genes.csv"
-    url_3 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_three_genes.csv"
-    url_4 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_four_genes.csv"
-    return mo, pd, px, re, url_1, url_2, url_3, url_4, url_cats, url_sc
+    return meld, mo, np, pd, px, scprep
 
 
 if __name__ == "__main__":
