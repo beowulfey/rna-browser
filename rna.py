@@ -23,12 +23,20 @@ def __(level, mo, source):
 
 
 @app.cell
-def __(mo, pathway, pathway_genes_converted):
+def __(cell, cell_fig, mo, path_fig, pathway, pathway_genes_converted):
     ## Some UI stuff
 
-    data_tab = mo.vstack(
+    cell_tab = mo.vstack(
+        [
+            cell,
+            cell_fig
+        ]
+    )
+
+    path_tab = mo.vstack(
         [
             pathway,
+            path_fig
         ]
     )
 
@@ -36,7 +44,7 @@ def __(mo, pathway, pathway_genes_converted):
         [
             pathway,
             mo.ui.table(
-                pathway_genes_converted.to_frame(),
+                pathway_genes_converted,
                 pagination=True,
                 page_size=10,
             ),
@@ -45,13 +53,14 @@ def __(mo, pathway, pathway_genes_converted):
 
     tabs = mo.ui.tabs(
         {
-            "Data Explorer": data_tab,
+            "Pathway Enrichment per Cell": cell_tab,
+            "Cell Enrichment per Pathway": path_tab,
             "Pathway Gene Lists": info_tab,
         }
     )
 
     tabs
-    return data_tab, info_tab, tabs
+    return cell_tab, info_tab, path_tab, tabs
 
 
 @app.cell
@@ -64,31 +73,32 @@ def __(mo):
 
 
 @app.cell
-def __(category_genes, level, mo):
+def __(category_genes, level, mo, reads):
     ## UI Elements that depend on other elements
 
     pathway = mo.ui.dropdown(category_genes[level.value].columns, value=category_genes[level.value].columns[0])
+    cell = mo.ui.dropdown(reads.columns.to_list(), value=reads.columns.to_list()[0])
 
     currcat = mo.ui.dropdown(
         category_genes[level.value].columns,
         value=category_genes[level.value].columns[0],
     )
-    return currcat, pathway
+    return cell, currcat, pathway
 
 
 @app.cell
-def __(category_genes, genes, level, mo, pathway):
+def __(category_genes, genes, level, pathway):
     ## UI Elements: third tier dependence
 
     pathway_genes_converted = genes.loc[genes.index.intersection(category_genes[level.value][pathway.value].dropna())]
-    pathway_genes_converted.rename("Gene", inplace=True)
-
-    mo.output.clear()
+    #pathway_genes_converted.rename("Gene", inplace=True)
+    #pathway_genes_converted
+    #mo.output.clear()
     return pathway_genes_converted,
 
 
 @app.cell
-def __(pd, source):
+def __(level, pd, re, source):
     ## DATA IMPORT
     #  Imports the categories (lists of genes in each category) at four levels of detail. Imports the CenGen Reads and pulls the gene names
     #  out into a separate dateframe.
@@ -105,6 +115,8 @@ def __(pd, source):
     url_2 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_two_genes.csv"
     url_3 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_three_genes.csv"
     url_4 = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/level_four_genes.csv"
+    url_genes = "https://raw.githubusercontent.com/beowulfey/rna-browser/main/data/wormbase_genes.csv"
+
 
     cats = pd.read_csv(url_cats)
     L1_genes = pd.read_csv(url_1)
@@ -121,13 +133,39 @@ def __(pd, source):
 
     reads = pd.read_csv(url_sc)
     reads.set_index("Wormbase_ID", inplace=True)
-    for _col in reads.columns[:]:
+
+    if source.value == "Bulk CeNGEN":
+        _curr_neur = None
+        _tmp = pd.DataFrame()
+        _avg = pd.DataFrame()
+        for _col in reads.columns:
+            _neur = re.split("[r]", _col)[0]
+            if _neur != _curr_neur and _curr_neur != None:
+                _avg.insert(len(_avg.columns), _curr_neur, _tmp.mean(axis=1))
+                _tmp = pd.DataFrame()
+                _curr_neur = _neur
+                _tmp.insert(len(_tmp.columns), len(_tmp.columns), reads[_col])
+        
+            elif _neur == _curr_neur:
+                _tmp.insert(len(_tmp.columns), len(_tmp.columns), reads[_col])
+            else:
+                _curr_neur = _neur
+                _tmp.insert(len(_tmp.columns), len(_tmp.columns), reads[_col])
+        reads = _avg
+
+
+    for _col in reads.columns:
         reads[_col] = pd.to_numeric(reads[_col], errors="coerce")
 
-    genes = reads["Gene_Name"]
-    reads.drop(["Sequence_Name", "Gene_Name"], axis=1, inplace=True)
+
+    genes = pd.read_csv(url_genes)
+    genes.set_index("Wormbase_ID", inplace=True)
 
     cells = reads.iloc[0].index.tolist()
+
+    pathway_genes = {}
+    for col in category_genes[level.value].columns:
+        pathway_genes[col] = category_genes[level.value][col].dropna().tolist()
     return (
         L1_genes,
         L2_genes,
@@ -136,55 +174,69 @@ def __(pd, source):
         category_genes,
         cats,
         cells,
+        col,
         genes,
+        pathway_genes,
         reads,
         url_1,
         url_2,
         url_3,
         url_4,
         url_cats,
+        url_genes,
         url_sc,
     )
 
 
 @app.cell
-def __(np, pathway_genes_converted, reads):
+def __(cell, np, pathway_genes, pathway_genes_converted, reads):
     per_cell = {}
     cell_sum = {}
+    path_sum = {}
+    meds = {}
 
-    for gene in pathway_genes_converted.index:
-        med = np.median([i for i in reads.loc[gene].to_list() if i > 0])
+    for _gene in pathway_genes_converted.index:
+        if _gene in reads.index:
+            _med = np.median([i for i in reads.loc[_gene].to_list() if i >= 0])
+            meds[_gene] = _med
+            for _cell in reads.loc[_gene].index:
+                if not _cell in per_cell.keys():
+                    per_cell[_cell] = {}
+                if _med > 0:
+                    per_cell[_cell][_gene] = (reads.loc[_gene].loc[_cell]) / _med
+                else:
+                    per_cell[_cell][_gene] = 0
+    for _cell in per_cell:
+        cell_sum[_cell] = np.median([i for i in list(per_cell[_cell].values()) if i >= 0])
 
-        for cell in reads.loc[gene].index:
-            # if cell == 'ASER':
-            # print(gene, pathway_genes_converted.loc[gene], cell, reads.loc[gene].loc[cell],reads.loc[gene].loc[cell]/med)
-            if not cell in per_cell.keys():
-                per_cell[cell] = {}
-            if med > 0:
-                per_cell[cell][gene] = (reads.loc[gene].loc[cell]) / med
-            else:
-                per_cell[cell][gene] = 0
+    for (_path,_genes) in pathway_genes.items():
+        _tmp_path = []
+        for _gene in _genes:
+            if _gene in reads.index:
+                _tmp_path.append(reads[cell.value].loc[_gene])
+        path_sum[_path] = np.median(_tmp_path)
 
-    for cell in per_cell:
-        cell_sum[cell] = np.median([i for i in list(per_cell[cell].values()) if i > 0])
-        # cell_sum[cell] = sum(list(per_cell[cell].values()))/len(list(per_cell[cell].values()))
-    return cell, cell_sum, gene, med, per_cell
-
-
-@app.cell
-def __(cell_sum, px):
-    _sorted = {k: v for k, v in sorted(cell_sum.items(), key=lambda item: item[1])}
-    _filtered = {k: v for k, v in _sorted.items() if v > 0}
-    neur_fig = px.scatter(x=_filtered.values(), y=_filtered.keys(), height=len(_filtered.values()) * 20)
-    neur_fig.update_xaxes(type="log")
-    neur_fig.update_yaxes(type="category")
-    neur_fig.update_layout(yaxis={"dtick": 1})
-    return neur_fig,
+    return cell_sum, meds, path_sum, per_cell
 
 
 @app.cell
-def __():
-    return
+def __(cell, cell_sum, mo, path_sum, pathway, px):
+    _sorted_cells = {k: v for k, v in sorted(cell_sum.items(), key=lambda item: item[1])}
+    _filtered_cells = {k: v for k, v in _sorted_cells.items() if v > 0}
+    path_fig = px.scatter(x=_filtered_cells.values(), y=_filtered_cells.keys(), height=len(_filtered_cells.values()) * 20, title=pathway.value)
+    path_fig.update_xaxes(type="log")
+    path_fig.update_yaxes(type="category")
+    path_fig.update_layout(yaxis={"dtick": 1})
+
+    _sorted_paths = {k: v for k, v in sorted(path_sum.items(), key=lambda item: item[1])}
+    _filtered_paths = {k: v for k, v in _sorted_paths.items() if v > 0}
+    cell_fig = px.scatter(x=_filtered_paths.values(), y=_filtered_paths.keys(), height=len(_filtered_paths.values()) * 20, title=cell.value)
+    cell_fig.update_xaxes(type="log")
+    cell_fig.update_yaxes(type="category")
+    cell_fig.update_layout(yaxis={"dtick": 1})
+
+    mo.output.clear()
+    return cell_fig, path_fig
 
 
 @app.cell
@@ -193,10 +245,11 @@ def __():
     import pandas as pd
     import numpy as np
     import plotly.express as px
+    import re
 
     # making sure plots & clusters are reproducible
     np.random.seed(42)
-    return mo, np, pd, px
+    return mo, np, pd, px, re
 
 
 if __name__ == "__main__":
